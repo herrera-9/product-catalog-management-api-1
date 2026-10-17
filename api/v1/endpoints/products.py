@@ -5,7 +5,7 @@ from pymongo.collection import Collection
 from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError, PyMongoError
 
 from core.database import get_products_collection
-from schemas.products import ProductCreate, ProductResponse, ProductUpdate
+from schemas.products import ProductCreate, ProductResponse, ProductUpdate, ProductDeleteResponse
 from utils.mongo import is_valid_object_id, serialize_doc, serialize_docs
 
 router = APIRouter(prefix="/products", tags=["Productos"])
@@ -202,4 +202,75 @@ def update_product(
         )
 
     return serialize_doc(updated_doc)
+
+
+@router.delete(
+    "/{product_id}",
+    response_model=ProductDeleteResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Eliminar producto por identificador",
+    description="Elimina físicamente un producto del catálogo mediante su identificador único de MongoDB (ObjectId).",
+    responses={
+        status.HTTP_200_OK: {
+            "description": "Producto eliminado correctamente",
+            "content": {"application/json": {"example": {"mensaje": "Producto eliminado correctamente"}}}
+        },
+        status.HTTP_400_BAD_REQUEST: {
+            "description": "Identificador inválido",
+            "content": {"application/json": {"example": {"detail": "El identificador del producto no es válido."}}}
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "description": "Producto no encontrado",
+            "content": {"application/json": {"example": {"detail": "Producto no encontrado."}}}
+        },
+        status.HTTP_503_SERVICE_UNAVAILABLE: {
+            "description": "Base de datos temporalmente no disponible",
+            "content": {"application/json": {"example": {"detail": "Base de datos temporalmente no disponible."}}}
+        },
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {
+            "description": "Error interno en la base de datos",
+            "content": {"application/json": {"example": {"detail": "Error interno al procesar la solicitud en la base de datos."}}}
+        }
+    }
+)
+def delete_product(
+    product_id: str,
+    collection: Collection = Depends(get_products_collection)
+):
+    """
+    Elimina físicamente un producto de la colección según su ObjectId.
+    Retorna 200 con mensaje si deleted_count == 1.
+    Retorna 400 si el identificador no tiene formato ObjectId válido.
+    Retorna 404 si el producto no existe en la base de datos.
+    Retorna 503 en caídas de conexión o 500 en otros errores de PyMongo.
+    """
+    if not is_valid_object_id(product_id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El identificador del producto no es válido."
+        )
+
+    oid = ObjectId(product_id)
+
+    try:
+        result = collection.delete_one({"_id": oid})
+    except (ConnectionFailure, ServerSelectionTimeoutError):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Base de datos temporalmente no disponible."
+        )
+    except PyMongoError:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno al procesar la solicitud en la base de datos."
+        )
+
+    if result.deleted_count == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Producto no encontrado."
+        )
+
+    return {"mensaje": "Producto eliminado correctamente"}
+
 
