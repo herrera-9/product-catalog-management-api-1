@@ -283,6 +283,78 @@ def filter_products_by_brand(
 
 
 @router.get(
+    "/filter/price",
+    response_model=List[ProductResponse],
+    response_model_by_alias=False,
+    status_code=status.HTTP_200_OK,
+    summary="Filtrar productos por rango de precios",
+    description="Permite obtener todos los productos cuyo precio se encuentre dentro del rango especificado (ambos límites inclusivos).",
+    responses={
+        status.HTTP_200_OK: {
+            "description": "Lista de productos dentro del rango de precios obtenida exitosamente"
+        },
+        status.HTTP_422_UNPROCESSABLE_ENTITY: {
+            "description": "Parámetros ausentes, no numéricos, negativos o rango inconsistente"
+        },
+        status.HTTP_503_SERVICE_UNAVAILABLE: {
+            "description": "Base de datos temporalmente no disponible"
+        },
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {
+            "description": "Error interno en la base de datos"
+        }
+    }
+)
+def filter_products_by_price(
+    min_price: float = Query(..., description="Precio mínimo del rango a filtrar"),
+    max_price: float = Query(..., description="Precio máximo del rango a filtrar"),
+    collection: Collection = Depends(get_products_collection)
+):
+    """
+    Filtra productos cuyo precio se encuentre entre min_price y max_price (inclusivo).
+    Rechaza parámetros ausentes o no numéricos con HTTP 422.
+    Rechaza precios negativos o rangos inconsistentes (min_price > max_price) con HTTP 422.
+    Devuelve HTTP 200 con la lista de productos encontrados o [] si no hay coincidencias.
+    """
+    if min_price < 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="El precio mínimo no puede ser negativo."
+        )
+    if max_price < 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="El precio máximo no puede ser negativo."
+        )
+    if min_price > max_price:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="El precio mínimo no puede ser superior al precio máximo."
+        )
+
+    query = {
+        "precio": {
+            "$gte": min_price,
+            "$lte": max_price
+        }
+    }
+
+    try:
+        cursor = collection.find(query)
+        docs = list(cursor)
+        return serialize_docs(docs)
+    except (ConnectionFailure, ServerSelectionTimeoutError):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Base de datos temporalmente no disponible."
+        )
+    except PyMongoError:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno al procesar la solicitud en la base de datos."
+        )
+
+
+@router.get(
     "/{product_id}",
     response_model=ProductResponse,
     response_model_by_alias=False,
