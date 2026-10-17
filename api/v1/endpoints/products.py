@@ -145,6 +145,81 @@ def search_products(
 
 
 @router.get(
+    "/category",
+    include_in_schema=False,
+    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY
+)
+def filter_products_by_category_empty():
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail="La categoría no puede estar vacía ni contener solo espacios en blanco."
+    )
+
+
+@router.get(
+    "/category/{categoria}",
+    response_model=List[ProductResponse],
+    response_model_by_alias=False,
+    status_code=status.HTTP_200_OK,
+    summary="Filtrar productos por categoría",
+    description="Permite obtener todos los productos que pertenezcan a una categoría específica, sin distinguir mayúsculas y minúsculas.",
+    responses={
+        status.HTTP_200_OK: {
+            "description": "Lista de productos filtrados por categoría obtenida exitosamente"
+        },
+        status.HTTP_422_UNPROCESSABLE_ENTITY: {
+            "description": "Categoría vacía o compuesta únicamente por espacios"
+        },
+        status.HTTP_503_SERVICE_UNAVAILABLE: {
+            "description": "Base de datos temporalmente no disponible"
+        },
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {
+            "description": "Error interno en la base de datos"
+        }
+    }
+)
+def filter_products_by_category(
+    categoria: str,
+    collection: Collection = Depends(get_products_collection)
+):
+    """
+    Filtra productos por coincidencia exacta de categoría (case-insensitive).
+    Rechaza categorías vacías o compuestas por espacios con HTTP 422.
+    Devuelve HTTP 200 con la lista de productos encontrados o [] si no hay coincidencias.
+    """
+    if not categoria or not categoria.strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="La categoría no puede estar vacía ni contener solo espacios en blanco."
+        )
+
+    clean_category = categoria.strip()
+    escaped_category = re.escape(clean_category)
+
+    query = {
+        "categoria": {
+            "$regex": f"^{escaped_category}$",
+            "$options": "i"
+        }
+    }
+
+    try:
+        cursor = collection.find(query)
+        docs = list(cursor)
+        return serialize_docs(docs)
+    except (ConnectionFailure, ServerSelectionTimeoutError):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Base de datos temporalmente no disponible."
+        )
+    except PyMongoError:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno al procesar la solicitud en la base de datos."
+        )
+
+
+@router.get(
     "/{product_id}",
     response_model=ProductResponse,
     response_model_by_alias=False,
