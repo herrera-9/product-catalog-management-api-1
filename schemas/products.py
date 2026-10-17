@@ -1,10 +1,17 @@
-from typing import List, Optional
-from pydantic import BaseModel, Field, ConfigDict
+from typing import List
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 
 
 class ProveedorSchema(BaseModel):
     nombre: str = Field(..., min_length=1, description="Nombre del proveedor")
     contacto: str = Field(..., min_length=1, description="Contacto del proveedor")
+
+    @field_validator("nombre", "contacto")
+    @classmethod
+    def validate_non_empty_supplier(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("El campo no puede estar vacío ni contener solo espacios.")
+        return v.strip()
 
 
 class ProductBase(BaseModel):
@@ -18,33 +25,40 @@ class ProductBase(BaseModel):
     etiquetas: List[str] = Field(default_factory=list, description="Lista de etiquetas descriptivas")
     proveedor: ProveedorSchema = Field(..., description="Datos de contacto y nombre del proveedor")
 
+    @field_validator("nombre", "descripcion", "categoria", "marca", "estado")
+    @classmethod
+    def validate_non_empty_strings(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("El campo no puede estar vacío ni contener solo espacios.")
+        return v.strip()
+
 
 class ProductCreate(ProductBase):
-    """Esquema base para la creación de productos en futuras funcionalidades."""
+    """Esquema para la creación de un nuevo producto."""
     pass
 
 
 class ProductResponse(ProductBase):
-    """Esquema base de respuesta con serialización de identificador MongoDB."""
-    id: Optional[str] = Field(default=None, alias="_id", description="Identificador único serializado como cadena")
+    """Esquema de respuesta que serializa el identificador de MongoDB."""
+    id: str = Field(alias="_id", description="Identificador único serializado como cadena de texto")
 
     model_config = ConfigDict(
         populate_by_name=True,
         from_attributes=True,
         json_schema_extra={
             "example": {
-                "_id": "60c72b2f9b1d8b2bad000001",
-                "nombre": "Teclado mecánico",
-                "descripcion": "Teclado USB para computadora",
-                "categoria": "Periféricos",
-                "precio": 350.0,
-                "stock": 25,
-                "marca": "Logitech",
-                "estado": "Disponible",
-                "etiquetas": ["teclado", "USB", "gaming"],
+                "id": "60c72b2f9b1d8b2bad000001",
+                "nombre": "Laptop Lenovo IdeaPad",
+                "descripcion": "Computadora portátil de 15 pulgadas con 8 GB de RAM y SSD de 512 GB",
+                "categoria": "Computadoras",
+                "precio": 4500.50,
+                "stock": 10,
+                "marca": "Lenovo",
+                "estado": "activo",
+                "etiquetas": ["laptop", "tecnologia", "oficina"],
                 "proveedor": {
-                    "nombre": "Proveedor Central",
-                    "contacto": "ventas@example.com"
+                    "nombre": "Distribuidora Tecnológica",
+                    "contacto": "proveedor@ejemplo.com"
                 }
             }
         }
