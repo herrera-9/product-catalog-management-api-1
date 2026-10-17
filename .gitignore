@@ -1,18 +1,32 @@
-# Entorno virtual
+# Entornos virtuales
 venv/
 .venv/
+env/
+.env/
 
-# Archivos de variables de entorno y secretos
+# Archivos de entorno y credenciales
 .env
 .env.*
+*.env
 
 # Cache de Python y archivos compilados
-_pycache_/
+__pycache__/
 *.py[cod]
 *$py.class
+*.pyc
 
-# Logs
+# Cache de pruebas y cobertura
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Despliegues y configuración de Vercel
+.vercel/
+
+# Logs y temporales
 *.log
+*.tmp
+*.bak
 
 # Carpetas de editores e IDEs
 .vscode/
