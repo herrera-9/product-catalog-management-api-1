@@ -1,11 +1,12 @@
 from typing import List
+from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, status
 from pymongo.collection import Collection
 from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError, PyMongoError
 
 from core.database import get_products_collection
 from schemas.products import ProductCreate, ProductResponse
-from utils.mongo import serialize_docs
+from utils.mongo import is_valid_object_id, serialize_doc, serialize_docs
 
 router = APIRouter(prefix="/products", tags=["Productos"])
 
@@ -76,3 +77,53 @@ def list_products(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno al procesar la solicitud en la base de datos."
         )
+
+
+@router.get(
+    "/{product_id}",
+    response_model=ProductResponse,
+    response_model_by_alias=False,
+    status_code=status.HTTP_200_OK,
+    summary="Consultar producto por identificador",
+    description="Permite consultar los datos detallados de un producto mediante su identificador único de MongoDB (ObjectId).",
+    responses={
+        status.HTTP_404_NOT_FOUND: {"description": "Producto no encontrado"},
+        status.HTTP_422_UNPROCESSABLE_ENTITY: {"description": "Identificador inválido (no es un ObjectId válido)"},
+        status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Base de datos temporalmente no disponible"},
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {"description": "Error interno en la base de datos"}
+    }
+)
+def get_product_by_id(
+    product_id: str,
+    collection: Collection = Depends(get_products_collection)
+):
+    """
+    Valida el formato del ObjectId, consulta el producto por _id y lo devuelve.
+    Retorna 422 si el identificador es inválido, 404 si no existe, o 200 con el producto.
+    """
+    if not is_valid_object_id(product_id):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Identificador inválido: '{product_id}' no es un ObjectId válido."
+        )
+
+    try:
+        doc = collection.find_one({"_id": ObjectId(product_id)})
+    except (ConnectionFailure, ServerSelectionTimeoutError):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Base de datos temporalmente no disponible."
+        )
+    except PyMongoError:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno al procesar la solicitud en la base de datos."
+        )
+
+    if doc is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Producto con identificador '{product_id}' no encontrado."
+        )
+
+    return serialize_doc(doc)
