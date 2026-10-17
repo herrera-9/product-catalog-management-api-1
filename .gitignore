@@ -1,0 +1,19 @@
+# Entorno virtual
+venv/
+.venv/
+
+# Archivos de variables de entorno y secretos
+.env
+.env.*
+
+# Cache de Python y archivos compilados
+_pycache_/
+*.py[cod]
+*$py.class
+
+# Logs
+*.log
+
+# Carpetas de editores e IDEs
+.vscode/
+.idea/
