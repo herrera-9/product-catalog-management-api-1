@@ -1,6 +1,7 @@
+import re
 from typing import List
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pymongo.collection import Collection
 from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError, PyMongoError
 
@@ -65,6 +66,70 @@ def list_products(
     """
     try:
         cursor = collection.find({})
+        docs = list(cursor)
+        return serialize_docs(docs)
+    except (ConnectionFailure, ServerSelectionTimeoutError):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Base de datos temporalmente no disponible."
+        )
+    except PyMongoError:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno al procesar la solicitud en la base de datos."
+        )
+
+
+@router.get(
+    "/search",
+    response_model=List[ProductResponse],
+    response_model_by_alias=False,
+    status_code=status.HTTP_200_OK,
+    summary="Buscar productos por nombre",
+    description="Permite buscar productos en el catálogo que coincidan de forma parcial con el nombre especificado, ignorando mayúsculas y minúsculas.",
+    responses={
+        status.HTTP_200_OK: {
+            "description": "Lista de productos coincidentes obtenida exitosamente"
+        },
+        status.HTTP_422_UNPROCESSABLE_ENTITY: {
+            "description": "Parámetro de búsqueda omitido, vacío o inválido"
+        },
+        status.HTTP_503_SERVICE_UNAVAILABLE: {
+            "description": "Base de datos temporalmente no disponible"
+        },
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {
+            "description": "Error interno en la base de datos"
+        }
+    }
+)
+def search_products(
+    name: str = Query(..., description="Término o fragmento del nombre a buscar"),
+    collection: Collection = Depends(get_products_collection)
+):
+    """
+    Busca productos en MongoDB cuyo campo 'nombre' contenga la cadena proporcionada.
+    La búsqueda es insensible a mayúsculas/minúsculas y soporta coincidencias parciales.
+    Rechaza valores vacíos o con solo espacios con HTTP 422.
+    Devuelve HTTP 200 con la lista de productos encontrados o [] si no hay coincidencias.
+    """
+    if not name or not name.strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="El parámetro de búsqueda 'name' no puede estar vacío ni contener solo espacios."
+        )
+
+    clean_name = name.strip()
+    escaped_name = re.escape(clean_name)
+
+    query = {
+        "nombre": {
+            "$regex": escaped_name,
+            "$options": "i"
+        }
+    }
+
+    try:
+        cursor = collection.find(query)
         docs = list(cursor)
         return serialize_docs(docs)
     except (ConnectionFailure, ServerSelectionTimeoutError):
