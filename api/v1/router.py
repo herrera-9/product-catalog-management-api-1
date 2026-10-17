@@ -1,5 +1,6 @@
 from fastapi import APIRouter
+from api.v1.endpoints import products
 
 router = APIRouter()
 
-# Enrutador preparado para registrar las funcionalidades futuras (F1 - F10)
+router.include_router(products.router)
