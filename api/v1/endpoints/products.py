@@ -355,6 +355,50 @@ def filter_products_by_price(
 
 
 @router.get(
+    "/available",
+    response_model=List[ProductResponse],
+    response_model_by_alias=False,
+    status_code=status.HTTP_200_OK,
+    summary="Consultar productos con stock disponible",
+    description="Permite obtener todos los productos que tengan stock disponible (stock mayor que cero).",
+    responses={
+        status.HTTP_200_OK: {
+            "description": "Lista de productos con stock disponible obtenida exitosamente"
+        },
+        status.HTTP_503_SERVICE_UNAVAILABLE: {
+            "description": "Base de datos temporalmente no disponible"
+        },
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {
+            "description": "Error interno en la base de datos"
+        }
+    }
+)
+def get_available_products(
+    collection: Collection = Depends(get_products_collection)
+):
+    """
+    Obtiene todos los productos cuyo campo 'stock' sea mayor que cero (stock > 0).
+    Devuelve HTTP 200 con la lista de productos disponibles o [] si ningún producto tiene stock.
+    """
+    query = {"stock": {"$gt": 0}}
+
+    try:
+        cursor = collection.find(query)
+        docs = list(cursor)
+        return serialize_docs(docs)
+    except (ConnectionFailure, ServerSelectionTimeoutError):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Base de datos temporalmente no disponible."
+        )
+    except PyMongoError:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno al procesar la solicitud en la base de datos."
+        )
+
+
+@router.get(
     "/{product_id}",
     response_model=ProductResponse,
     response_model_by_alias=False,
