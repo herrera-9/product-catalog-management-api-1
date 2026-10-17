@@ -25,7 +25,11 @@ def serialize_doc(doc: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         return None
     data = dict(doc)
     if "_id" in data and data["_id"] is not None:
-        data["_id"] = str(data["_id"])
+        str_id = str(data["_id"])
+        data["_id"] = str_id
+        data["id"] = str_id
+    elif "id" in data and data["id"] is not None:
+        data["id"] = str(data["id"])
     return data
 
 

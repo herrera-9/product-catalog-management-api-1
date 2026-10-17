@@ -19,6 +19,7 @@ __pycache__/
 .pytest_cache/
 .coverage
 htmlcov/
+tests/
 
 # Despliegues y configuración de Vercel
 .vercel/
