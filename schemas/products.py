@@ -117,3 +117,17 @@ class ProductResponse(ProductBase):
             }
         }
     )
+
+
+class ProductDeleteResponse(BaseModel):
+    """Esquema de respuesta para la eliminación de un producto."""
+    mensaje: str = Field(default="Producto eliminado correctamente", description="Mensaje informativo de la operación")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "mensaje": "Producto eliminado correctamente"
+            }
+        }
+    )
+
