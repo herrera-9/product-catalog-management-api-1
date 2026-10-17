@@ -5,7 +5,7 @@ from pymongo.collection import Collection
 from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError, PyMongoError
 
 from core.database import get_products_collection
-from schemas.products import ProductCreate, ProductResponse
+from schemas.products import ProductCreate, ProductResponse, ProductUpdate
 from utils.mongo import is_valid_object_id, serialize_doc, serialize_docs
 
 router = APIRouter(prefix="/products", tags=["Productos"])
@@ -127,3 +127,79 @@ def get_product_by_id(
         )
 
     return serialize_doc(doc)
+
+
+@router.put(
+    "/{product_id}",
+    response_model=ProductResponse,
+    response_model_by_alias=False,
+    status_code=status.HTTP_200_OK,
+    summary="Actualizar producto por identificador",
+    description="Permite actualizar de forma completa o individual los campos editables de un producto existente mediante su ObjectId.",
+    responses={
+        status.HTTP_404_NOT_FOUND: {"description": "Producto no encontrado"},
+        status.HTTP_422_UNPROCESSABLE_ENTITY: {"description": "Identificador o datos de entrada inválidos"},
+        status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Base de datos temporalmente no disponible"},
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {"description": "Error interno en la base de datos"}
+    }
+)
+def update_product(
+    product_id: str,
+    product_in: ProductUpdate,
+    collection: Collection = Depends(get_products_collection)
+):
+    """
+    Actualiza los campos editables de un producto existente en MongoDB.
+    Valida el identificador ObjectId y los campos editables provistos.
+    Devuelve el producto actualizado o los códigos de error correspondientes (404, 422, 500, 503).
+    """
+    if not is_valid_object_id(product_id):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Identificador inválido: '{product_id}' no es un ObjectId válido."
+        )
+
+    update_data = product_in.model_dump(exclude_unset=True)
+    if not update_data:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Debe proporcionar al menos un campo editable para actualizar."
+        )
+
+    # Asegurar que no se modifique directamente _id ni id
+    update_data.pop("_id", None)
+    update_data.pop("id", None)
+
+    oid = ObjectId(product_id)
+
+    try:
+        existing_doc = collection.find_one({"_id": oid})
+        if existing_doc is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Producto con identificador '{product_id}' no encontrado."
+            )
+
+        collection.update_one({"_id": oid}, {"$set": update_data})
+        updated_doc = collection.find_one({"_id": oid})
+    except HTTPException:
+        raise
+    except (ConnectionFailure, ServerSelectionTimeoutError):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Base de datos temporalmente no disponible."
+        )
+    except PyMongoError:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno al procesar la solicitud en la base de datos."
+        )
+
+    if updated_doc is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Producto con identificador '{product_id}' no encontrado."
+        )
+
+    return serialize_doc(updated_doc)
+

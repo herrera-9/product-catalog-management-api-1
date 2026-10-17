@@ -1,5 +1,5 @@
-from typing import List
-from pydantic import BaseModel, Field, field_validator, ConfigDict
+from typing import List, Optional
+from pydantic import BaseModel, Field, field_validator, ConfigDict, model_validator
 
 
 class ProveedorSchema(BaseModel):
@@ -36,6 +36,60 @@ class ProductBase(BaseModel):
 class ProductCreate(ProductBase):
     """Esquema para la creación de un nuevo producto."""
     pass
+
+
+class ProductUpdate(BaseModel):
+    """Esquema para la actualización parcial o total de un producto existente."""
+    nombre: Optional[str] = Field(None, min_length=1, description="Nombre del producto")
+    descripcion: Optional[str] = Field(None, min_length=1, description="Descripción del producto")
+    categoria: Optional[str] = Field(None, min_length=1, description="Categoría a la que pertenece el producto")
+    precio: Optional[float] = Field(None, ge=0, description="Precio numérico no negativo")
+    stock: Optional[int] = Field(None, ge=0, description="Cantidad disponible, entero no negativo")
+    marca: Optional[str] = Field(None, min_length=1, description="Marca del producto")
+    estado: Optional[str] = Field(None, min_length=1, description="Estado del producto")
+    etiquetas: Optional[List[str]] = Field(None, description="Lista de etiquetas descriptivas")
+    proveedor: Optional[ProveedorSchema] = Field(None, description="Datos de contacto y nombre del proveedor")
+
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "example": {
+                "nombre": "Laptop Lenovo IdeaPad Slim",
+                "precio": 4200.00,
+                "stock": 15
+            }
+        }
+    )
+
+    @field_validator("nombre", "descripcion", "categoria", "marca", "estado")
+    @classmethod
+    def validate_non_empty_strings(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None:
+            if not v or not v.strip():
+                raise ValueError("El campo no puede estar vacío ni contener solo espacios.")
+            return v.strip()
+        return v
+
+    @field_validator("etiquetas")
+    @classmethod
+    def validate_tags(cls, v: Optional[List[str]]) -> Optional[List[str]]:
+        if v is not None:
+            cleaned = []
+            for tag in v:
+                if not isinstance(tag, str) or not tag.strip():
+                    raise ValueError("Las etiquetas no pueden estar vacías ni contener solo espacios.")
+                cleaned.append(tag.strip())
+            return cleaned
+        return v
+
+    @model_validator(mode="after")
+    def validate_fields_and_presence(self) -> "ProductUpdate":
+        if not self.model_fields_set:
+            raise ValueError("Debe proporcionar al menos un campo editable para actualizar.")
+        for field_name in self.model_fields_set:
+            if getattr(self, field_name) is None:
+                raise ValueError(f"El campo '{field_name}' no puede ser nulo.")
+        return self
 
 
 class ProductResponse(ProductBase):
