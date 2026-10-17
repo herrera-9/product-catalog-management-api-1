@@ -220,6 +220,69 @@ def filter_products_by_category(
 
 
 @router.get(
+    "/filter/brand",
+    response_model=List[ProductResponse],
+    response_model_by_alias=False,
+    status_code=status.HTTP_200_OK,
+    summary="Filtrar productos por marca",
+    description="Permite obtener todos los productos que pertenezcan a una marca específica, con coincidencia exacta e insensible a mayúsculas y minúsculas.",
+    responses={
+        status.HTTP_200_OK: {
+            "description": "Lista de productos filtrados por marca obtenida exitosamente"
+        },
+        status.HTTP_422_UNPROCESSABLE_ENTITY: {
+            "description": "Parámetro de marca ausente, vacío o inválido"
+        },
+        status.HTTP_503_SERVICE_UNAVAILABLE: {
+            "description": "Base de datos temporalmente no disponible"
+        },
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {
+            "description": "Error interno en la base de datos"
+        }
+    }
+)
+def filter_products_by_brand(
+    brand: str = Query(..., description="Nombre de la marca a filtrar"),
+    collection: Collection = Depends(get_products_collection)
+):
+    """
+    Filtra productos por coincidencia exacta de marca (case-insensitive).
+    Rechaza parámetros vacíos o con solo espacios con HTTP 422.
+    Devuelve HTTP 200 con la lista de productos encontrados o [] si no hay coincidencias.
+    """
+    if not brand or not brand.strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="El parámetro de búsqueda 'brand' no puede estar vacío ni contener solo espacios."
+        )
+
+    brand_clean = brand.strip()
+    brand_pattern = f"^{re.escape(brand_clean)}$"
+
+    query = {
+        "marca": {
+            "$regex": brand_pattern,
+            "$options": "i"
+        }
+    }
+
+    try:
+        cursor = collection.find(query)
+        docs = list(cursor)
+        return serialize_docs(docs)
+    except (ConnectionFailure, ServerSelectionTimeoutError):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Base de datos temporalmente no disponible."
+        )
+    except PyMongoError:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno al procesar la solicitud en la base de datos."
+        )
+
+
+@router.get(
     "/{product_id}",
     response_model=ProductResponse,
     response_model_by_alias=False,
